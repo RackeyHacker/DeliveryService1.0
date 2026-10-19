@@ -1,0 +1,40 @@
+server:
+  port: 8080
+spring:
+  application:
+    name: delivery-service
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+    hikari:
+      connection-timeout: 3000
+  sql:
+    init:
+      mode: always
+  rabbitmq:
+    host: ${RABBIT_HOST:rabbitmq}
+    username: ${RABBIT_USER:pw8}
+    password: ${RABBIT_PASSWORD:pw8-local}
+    connection-timeout: 3s
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    listener:
+      simple:
+        retry:
+          enabled: true
+          max-attempts: 5
+          initial-interval: 1s
+          max-interval: 5s
+          multiplier: 2
+        default-requeue-rejected: false
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true

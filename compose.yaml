@@ -1,0 +1,136 @@
+name: pw8
+x-app: &app
+  restart: unless-stopped
+  healthcheck:
+    test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health/liveness"]
+    interval: 10s
+    timeout: 4s
+    retries: 15
+    start_period: 60s
+  networks: [backend]
+x-business-env: &business-env
+  RABBIT_HOST: rabbitmq
+  RABBIT_USER: pw8
+  RABBIT_PASSWORD: pw8-local
+services:
+  api-gateway:
+    <<: *app
+    build:
+      context: .
+      args:
+        SERVICE: api-gateway
+    ports: ["8080:8080"]
+    environment:
+      ORDER_URL: http://order-service:8080
+      DELIVERY_URL: http://delivery-service:8080
+      SUPPLIER_URL: http://supplier-service:8080
+    depends_on:
+      order-service: {condition: service_healthy}
+      delivery-service: {condition: service_healthy}
+      supplier-service: {condition: service_healthy}
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: pw8
+      RABBITMQ_DEFAULT_PASS: pw8-local
+    ports: ["127.0.0.1:15672:15672"]
+    volumes: [rabbit-data:/var/lib/rabbitmq]
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+  supplier-service:
+    <<: *app
+    build:
+      context: .
+      args:
+        SERVICE: supplier-service
+    environment:
+      <<: *business-env
+      DB_URL: jdbc:postgresql://supplier-db:5432/suppliers_db?connectTimeout=2&socketTimeout=3
+      DB_USER: supplier
+      DB_PASSWORD: supplier-local
+    depends_on:
+      supplier-db: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+  supplier-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: suppliers_db
+      POSTGRES_USER: supplier
+      POSTGRES_PASSWORD: supplier-local
+    volumes: [supplier-data:/var/lib/postgresql/data]
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U supplier -d suppliers_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+  order-service:
+    <<: *app
+    build:
+      context: .
+      args:
+        SERVICE: order-service
+    environment:
+      <<: *business-env
+      DB_URL: jdbc:postgresql://order-db:5432/orders_db?connectTimeout=2&socketTimeout=3
+      DB_USER: order
+      DB_PASSWORD: order-local
+    depends_on:
+      order-db: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+  order-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: orders_db
+      POSTGRES_USER: order
+      POSTGRES_PASSWORD: order-local
+    volumes: [order-data:/var/lib/postgresql/data]
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U order -d orders_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+  delivery-service:
+    <<: *app
+    build:
+      context: .
+      args:
+        SERVICE: delivery-service
+    environment:
+      <<: *business-env
+      DB_URL: jdbc:postgresql://delivery-db:5432/deliveries_db?connectTimeout=2&socketTimeout=3
+      DB_USER: delivery
+      DB_PASSWORD: delivery-local
+    depends_on:
+      delivery-db: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+  delivery-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: deliveries_db
+      POSTGRES_USER: delivery
+      POSTGRES_PASSWORD: delivery-local
+    volumes: [delivery-data:/var/lib/postgresql/data]
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U delivery -d deliveries_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+networks:
+  backend:
+    driver: bridge
+volumes:
+  rabbit-data:
+  supplier-data:
+  order-data:
+  delivery-data:
